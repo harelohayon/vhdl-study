@@ -1,0 +1,60 @@
+library IEEE;
+use IEEE.std_logic_1164.all;
+use IEEE.numeric_std.all;
+
+entity txd_1 is
+  port (
+    clk     : in std_logic;
+    resetN  : in std_logic;
+    sendto  : in std_logic_vector(7 downto 0);
+    new_data: in std_logic;
+    txd     : out std_logic
+  );
+end entity;
+
+architecture a of txd_1 is
+  constant FREQ       : integer := 50000000;
+  constant BAUD       : integer := 9600;
+  constant BAUD_TICK  : integer := FREQ / BAUD;
+
+  signal shift_reg    : std_logic_vector(9 downto 0) := (others => '1'); -- 1=start, 8=data, 1=stop
+  signal bit_cnt      : integer range 0 to 9 := 0;
+  signal baud_counter : integer := 0;
+  signal tx_busy      : std_logic := '0';
+
+begin
+
+  process(clk)
+  begin
+    if rising_edge(clk) then
+      if resetN = '0' then
+        txd           <= '1'; -- idle
+        tx_busy       <= '0';
+        bit_cnt       <= 0;
+        baud_counter  <= 0;
+
+      elsif tx_busy = '0' and new_data = '1' then
+        -- Prepare data to shift out: start bit (0), 8 data bits, stop bit (1)
+        shift_reg     <= '0' & sendto & '1';
+        tx_busy       <= '1';
+        bit_cnt       <= 0;
+        baud_counter  <= 0;
+
+      elsif tx_busy = '1' then
+        if baud_counter = BAUD_TICK - 1 then
+          txd <= shift_reg(bit_cnt);
+          baud_counter <= 0;
+          if bit_cnt = 9 then
+            tx_busy <= '0';
+            txd     <= '1'; -- back to idle
+          else
+            bit_cnt <= bit_cnt + 1;
+          end if;
+        else
+          baud_counter <= baud_counter + 1;
+        end if;
+      end if;
+    end if;
+  end process;
+
+end architecture;
